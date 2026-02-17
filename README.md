@@ -1,78 +1,112 @@
 # Resource Allocation Agent
 
-Manages shared resources (equipment, licenses, parking spots). Employees request and return items via chat; the agent tracks assignments, sends return reminders, and provides utilization metrics. Waitlists and automated assignment are supported.
+A Cloudflare Worker that manages shared company resources—equipment, software licenses, parking spots—so employees can request and return items via chat. The agent tracks who has what, maintains waitlists with automatic assignment when items are returned, sends return reminders, and exposes utilization metrics for the business.
 
-## Stack
+**Live demo:** `https://resource-allocation-agent.ayekudemilade43.workers.dev`
 
-- **Cloudflare Agents SDK** (`agents`) on Durable Objects
-- **JavaScript/TypeScript** worker
+---
 
-## Setup
+## Highlights
+
+- **Stateful agent** on [Cloudflare Durable Objects](https://developers.cloudflare.com/durable-objects/) using the [Agents SDK](https://developers.cloudflare.com/agents/) — request/return, waitlists, scheduled return reminders, and in-app notifications.
+- **Chat interface** — employees use simple commands (`request P1`, `return P1`, `list resources`, `what do I have`, `utilization`); no AI/LLM required.
+- **Utilization API** — `GET /api/utilization` returns JSON metrics (by resource, by date) for dashboards or reporting.
+- **Optional MCP** — when `SLACK_MCP_URL` or `EMAIL_MCP_URL` are set, the agent notifies users via Slack or Email (waitlist position, resource available, return reminders).
+
+Built with **TypeScript**, **Wrangler**, and **Cloudflare Workers**. No database beyond the agent’s built-in SQLite-backed state.
+
+---
+
+## Quick start
 
 ```bash
 npm install
-cp .dev.vars.example .dev.vars   # optional, for any future secrets
 npm run dev
 ```
 
-## Endpoints
-
-- **Agent (WebSocket + HTTP)**  
-  Connect to the agent at:
-  - Path: `/agents/resource-allocation-agent/default`  
-  (or use any instance name, e.g. `default`, `office-1`.)
-
-  Clients can call these methods via the Agents SDK (e.g. `agent.stub.requestResource(...)` or `handleChat(userId, message)`):
-  - `requestResource(resourceId, userId, dueReturnAt?)` – request a resource (or join waitlist)
-  - `returnResource(resourceId, userId)` – return a resource (next on waitlist is auto-assigned)
-  - `listMyAssignments(userId)` – list current assignments
-  - `listResources(type?)` – list resources and availability
-  - `getUtilization(resourceId?, dateFrom?, dateTo?)` – utilization metrics
-  - `handleChat(userId, message)` – simple chat: "request P1", "return P1", "list resources", "what do I have", "utilization"
-  - `clearNotifications(userId)` – clear pending reminders for a user
-
-- **Utilization API (HTTP)**  
-  - `GET /api/utilization?resourceId=&dateFrom=&dateTo=`  
-  Returns JSON utilization data for dashboards.
-
-## Chat commands (via `handleChat(userId, message)`)
-
-- `request P1` or `request resource P1` – request resource by id
-- `return P1` – return resource
-- `list resources` or `resources` – list all resources and availability
-- `what do I have` or `my assignments` – list your assignments
-- `utilization` – show utilization metrics
-
-## Return reminders
-
-A daily job runs at 9:00 (cron `0 9 * * *`), finds assignments with `dueReturnAt` in the next 24 hours, and pushes reminder messages into `state.notifications[userId]`. If MCP is configured, the agent also sends reminders via Slack or Email MCP. Clients can show in-app notifications and call `clearNotifications(userId)` when done.
-
-## MCP (Model Context Protocol) notifications
-
-The agent can optionally call **external MCP servers** to send notifications. When configured, it will:
-
-- Notify users when they are added to a waitlist (position and resource name).
-- Notify the next user when a resource becomes available (auto-assignment).
-- Send return reminders (in addition to in-app `state.notifications`).
-
-**Configuration (opt-in):** Set environment variables (or Wrangler `vars` / secrets):
-
-- `SLACK_MCP_URL` – URL of a Slack/Teams MCP server (e.g. `https://your-slack-mcp.example.com/mcp`).
-- `EMAIL_MCP_URL` – URL of an Email MCP server.
-
-The agent registers these in `onStart()` with `addMcpServer`. If a server fails to connect, the agent logs and continues; core behavior is unchanged without MCP.
-
-**Tool names and arguments** depend on your MCP server. This implementation uses:
-
-- **Slack:** `send_message` with `channel` (userId) and `message`.
-- **Email:** `send_email` with `to` (userId) and `body`.
-
-Adjust `notifyViaMcp` in [src/ResourceAllocationAgent.ts](src/ResourceAllocationAgent.ts) if your server exposes different tool names or parameters. OAuth-protected MCP servers are supported via the SDK’s `addMcpServer` flow. See [Cloudflare Agents MCP docs](https://developers.cloudflare.com/agents/api-reference/mcp-agent-api/).
-
-## Deploy
+Optional: copy `.dev.vars.example` to `.dev.vars` and add any secrets (e.g. MCP server URLs). Deploy with:
 
 ```bash
 npm run deploy
 ```
 
-Then use your worker URL (e.g. `https://resource-allocation-agent.<account>.workers.dev`) for the agent path and `/api/utilization`.
+---
+
+## Routes
+
+| Route | Description |
+|-------|-------------|
+| `/` | Static landing page (from `public/`). |
+| `/message` | Legacy demo response. |
+| `GET /api/utilization` | Read-only utilization metrics. Query params: `resourceId`, `dateFrom`, `dateTo`. |
+| `/agents/resource-allocation-agent/:name` | Agent WebSocket + HTTP (e.g. `default`, `office-1`). |
+
+---
+
+## Agent API (callable methods)
+
+Connect to the agent via the [Agents SDK](https://developers.cloudflare.com/agents/) (e.g. `agent.stub.requestResource(...)`) or use `handleChat(userId, message)` for command-style interaction.
+
+| Method | Description |
+|--------|-------------|
+| `requestResource(resourceId, userId, dueReturnAt?)` | Assign resource if available; otherwise add user to waitlist. |
+| `returnResource(resourceId, userId)` | Mark returned; next on waitlist is auto-assigned. |
+| `listMyAssignments(userId)` | Active assignments for the user. |
+| `listResources(type?)` | All resources with current availability (`available` count). |
+| `getUtilization(resourceId?, dateFrom?, dateTo?)` | Utilization metrics (by resource, date). |
+| `handleChat(userId, message)` | Parse chat and run the right action (see commands below). |
+| `clearNotifications(userId)` | Clear pending reminder messages for the user. |
+
+### Chat commands (via `handleChat`)
+
+- `request P1` / `request resource P1` — request resource by id  
+- `return P1` — return resource  
+- `list resources` / `resources` — list resources and availability  
+- `what do I have` / `my assignments` — list your assignments  
+- `utilization` — show utilization metrics  
+
+---
+
+## Return reminders
+
+A daily cron job runs at 09:00 UTC, finds assignments with `dueReturnAt` in the next 24 hours, and:
+
+- Pushes reminder messages into `state.notifications[userId]` (clients can show these and call `clearNotifications(userId)` when done).
+- If MCP is configured, also sends reminders via Slack or Email.
+
+---
+
+## MCP (optional notifications)
+
+With **Model Context Protocol** servers configured, the agent sends notifications for:
+
+- **Waitlist** — when a user is added (“You’re #N for …”).
+- **Auto-assign** — when a resource becomes available for the next person on the waitlist.
+- **Reminders** — return-due reminders (in addition to in-app notifications).
+
+**Setup:** Set `SLACK_MCP_URL` and/or `EMAIL_MCP_URL` (env vars or Wrangler secrets). The agent registers them in `onStart()`; failed connections are logged and do not affect core behavior.
+
+Tool names used: **Slack** `send_message` (`channel`, `message`), **Email** `send_email` (`to`, `body`). Adjust [src/ResourceAllocationAgent.ts](src/ResourceAllocationAgent.ts) if your MCP server uses different tools. See [Cloudflare Agents MCP docs](https://developers.cloudflare.com/agents/api-reference/mcp-agent-api/).
+
+---
+
+## Project structure
+
+```
+├── src/
+│   ├── index.ts                 # Worker entry: routes, /api/utilization, agent routing
+│   └── ResourceAllocationAgent.ts # Agent: state, callables, MCP, reminders
+├── public/
+│   └── index.html               # Landing page
+├── test/
+│   └── index.spec.ts            # Vitest tests (message, random, utilization)
+├── wrangler.jsonc               # Worker name, DO binding, migrations, assets
+└── worker-configuration.d.ts     # Env types (ResourceAllocationAgent, ASSETS, MCP URLs)
+```
+
+---
+
+## Notes
+
+- **Local tests:** `npm test` runs Vitest with the Cloudflare Workers pool. On some Windows environments the Miniflare runtime may fail to start; deployment and production behavior are unchanged.
+- **Secrets:** Use `.dev.vars` locally and `wrangler secret put` in production for `SLACK_MCP_URL` / `EMAIL_MCP_URL` if you use MCP.
