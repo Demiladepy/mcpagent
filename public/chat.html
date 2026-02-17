@@ -4,54 +4,289 @@
 	<meta charset="UTF-8" />
 	<meta name="viewport" content="width=device-width, initial-scale=1.0" />
 	<title>Resource Allocation – Chat</title>
+	<link rel="preconnect" href="https://fonts.googleapis.com" />
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+	<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&display=swap" rel="stylesheet" />
 	<style>
-		:root { --bg: #0f0f12; --surface: #1a1a1f; --border: #2a2a32; --text: #e4e4e7; --muted: #71717a; --accent: #7c3aed; --accent-hover: #8b5cf6; }
+		:root {
+			--bg: #0c0c0f;
+			--bg-elevated: #12121a;
+			--surface: #18181f;
+			--surface-hover: #1e1e28;
+			--border: #2a2a36;
+			--border-focus: #3d3d4d;
+			--text: #f1f1f4;
+			--text-secondary: #a1a1aa;
+			--text-muted: #71717a;
+			--accent: #6366f1;
+			--accent-hover: #818cf8;
+			--accent-muted: rgba(99, 102, 241, 0.15);
+			--success: #22c55e;
+			--error: #ef4444;
+			--radius: 12px;
+			--radius-sm: 8px;
+			--shadow: 0 4px 24px rgba(0, 0, 0, 0.4);
+		}
+
 		* { box-sizing: border-box; }
-		body { font-family: system-ui, -apple-system, sans-serif; background: var(--bg); color: var(--text); margin: 0; min-height: 100vh; }
-		.container { max-width: 720px; margin: 0 auto; padding: 1rem; display: flex; flex-direction: column; gap: 1rem; }
-		h1 { font-size: 1.25rem; font-weight: 600; margin: 0; }
-		.status { font-size: 0.875rem; color: var(--muted); }
-		.panel { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 1rem; }
-		.panel h2 { font-size: 0.875rem; font-weight: 600; margin: 0 0 0.5rem 0; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; }
-		#log { min-height: 200px; max-height: 40vh; overflow-y: auto; display: flex; flex-direction: column; gap: 0.5rem; }
-		.msg { padding: 0.5rem 0.75rem; border-radius: 6px; font-size: 0.9rem; max-width: 85%; }
-		.msg.user { background: var(--accent); color: #fff; align-self: flex-end; }
-		.msg.assistant { background: var(--border); align-self: flex-start; }
-		.row { display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; }
-		input[type="text"] { flex: 1; min-width: 120px; padding: 0.5rem 0.75rem; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); color: var(--text); font-size: 1rem; }
-		button { padding: 0.5rem 1rem; border-radius: 6px; border: none; font-size: 0.9rem; cursor: pointer; font-weight: 500; }
-		button.primary { background: var(--accent); color: #fff; }
-		button.primary:hover { background: var(--accent-hover); }
-		button.secondary { background: var(--border); color: var(--text); }
-		button.secondary:hover { background: #3a3a45; }
+		body {
+			font-family: 'DM Sans', system-ui, -apple-system, sans-serif;
+			background: var(--bg);
+			color: var(--text);
+			margin: 0;
+			min-height: 100vh;
+			line-height: 1.5;
+		}
+
+		.container {
+			max-width: 800px;
+			margin: 0 auto;
+			padding: 1.5rem;
+			display: flex;
+			flex-direction: column;
+			gap: 1.5rem;
+		}
+
+		.header {
+			display: flex;
+			align-items: center;
+			justify-content: space-between;
+			flex-wrap: wrap;
+			gap: 0.75rem;
+		}
+
+		.header h1 {
+			font-size: 1.5rem;
+			font-weight: 700;
+			margin: 0;
+			letter-spacing: -0.02em;
+		}
+
+		.header a {
+			color: var(--text-secondary);
+			text-decoration: none;
+			font-size: 0.875rem;
+		}
+		.header a:hover { color: var(--accent); }
+
+		.status-bar {
+			display: flex;
+			align-items: center;
+			gap: 0.5rem;
+			font-size: 0.8125rem;
+			color: var(--text-muted);
+		}
+
+		.status-dot {
+			width: 8px;
+			height: 8px;
+			border-radius: 50%;
+			background: var(--text-muted);
+			transition: background 0.2s;
+		}
+		.status-dot.connected { background: var(--success); box-shadow: 0 0 8px var(--success); }
+		.status-dot.error { background: var(--error); }
+		.status-dot.connecting { animation: pulse 1.2s ease-in-out infinite; }
+
+		@keyframes pulse {
+			0%, 100% { opacity: 1; }
+			50% { opacity: 0.4; }
+		}
+
+		.panel {
+			background: var(--surface);
+			border: 1px solid var(--border);
+			border-radius: var(--radius);
+			padding: 1.25rem;
+			box-shadow: var(--shadow);
+		}
+
+		.panel h2 {
+			font-size: 0.6875rem;
+			font-weight: 600;
+			margin: 0 0 0.75rem 0;
+			color: var(--text-muted);
+			text-transform: uppercase;
+			letter-spacing: 0.08em;
+		}
+
+		.state-grid {
+			display: grid;
+			grid-template-columns: 1fr 1fr;
+			gap: 1rem;
+		}
+		@media (max-width: 500px) { .state-grid { grid-template-columns: 1fr; } }
+
+		.state-block strong {
+			display: block;
+			font-size: 0.8125rem;
+			color: var(--text-secondary);
+			margin-bottom: 0.25rem;
+		}
+
+		#stateAssignments, #stateNotifications {
+			font-size: 0.875rem;
+			margin: 0;
+			padding-left: 1.25rem;
+			color: var(--text-secondary);
+		}
+		#stateAssignments li, #stateNotifications li { margin: 0.35rem 0; }
+
+		#log {
+			min-height: 260px;
+			max-height: 45vh;
+			overflow-y: auto;
+			display: flex;
+			flex-direction: column;
+			gap: 0.75rem;
+			padding: 0.25rem 0;
+		}
+		#log::-webkit-scrollbar { width: 6px; }
+		#log::-webkit-scrollbar-track { background: transparent; }
+		#log::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+		.msg {
+			padding: 0.75rem 1rem;
+			border-radius: var(--radius-sm);
+			font-size: 0.9375rem;
+			max-width: 88%;
+			line-height: 1.5;
+		}
+		.msg.user {
+			background: var(--accent);
+			color: #fff;
+			align-self: flex-end;
+			border-bottom-right-radius: 4px;
+		}
+		.msg.assistant {
+			background: var(--bg-elevated);
+			border: 1px solid var(--border);
+			align-self: flex-start;
+			border-bottom-left-radius: 4px;
+		}
+		.msg .role-label {
+			font-size: 0.6875rem;
+			text-transform: uppercase;
+			letter-spacing: 0.06em;
+			margin-bottom: 0.25rem;
+			opacity: 0.8;
+		}
+
+		.input-row {
+			display: flex;
+			gap: 0.5rem;
+			align-items: stretch;
+			flex-wrap: wrap;
+			margin-top: 1rem;
+		}
+
+		.user-id-wrap {
+			display: flex;
+			align-items: center;
+			gap: 0.5rem;
+		}
+		.user-id-wrap label {
+			font-size: 0.8125rem;
+			color: var(--text-muted);
+			white-space: nowrap;
+		}
+
+		input[type="text"] {
+			flex: 1;
+			min-width: 160px;
+			padding: 0.625rem 1rem;
+			border: 1px solid var(--border);
+			border-radius: var(--radius-sm);
+			background: var(--bg-elevated);
+			color: var(--text);
+			font-size: 0.9375rem;
+			font-family: inherit;
+			transition: border-color 0.15s, box-shadow 0.15s;
+		}
+		input[type="text"]::placeholder { color: var(--text-muted); }
+		input[type="text"]:focus {
+			outline: none;
+			border-color: var(--accent);
+			box-shadow: 0 0 0 3px var(--accent-muted);
+		}
+
+		#userId { width: 100px; flex: 0 0 100px; }
+
+		button {
+			padding: 0.625rem 1.25rem;
+			border-radius: var(--radius-sm);
+			border: none;
+			font-size: 0.9375rem;
+			font-weight: 500;
+			cursor: pointer;
+			font-family: inherit;
+			transition: background 0.15s, transform 0.05s;
+		}
+		button:active { transform: scale(0.98); }
+		button.primary {
+			background: var(--accent);
+			color: #fff;
+		}
+		button.primary:hover:not(:disabled) { background: var(--accent-hover); }
+		button.secondary {
+			background: var(--surface-hover);
+			color: var(--text);
+			border: 1px solid var(--border);
+		}
+		button.secondary:hover:not(:disabled) {
+			background: var(--border);
+			border-color: var(--border-focus);
+		}
 		button:disabled { opacity: 0.5; cursor: not-allowed; }
-		#stateAssignments, #stateNotifications { font-size: 0.875rem; margin: 0; padding-left: 1.25rem; }
-		#stateAssignments li, #stateNotifications li { margin: 0.25rem 0; }
-		.recommendations { font-size: 0.875rem; color: var(--muted); }
-		.recommendations ul { margin: 0.25rem 0 0 1rem; padding: 0; }
+
+		.recommendations {
+			margin-top: 1rem;
+			padding-top: 1rem;
+			border-top: 1px solid var(--border);
+			font-size: 0.875rem;
+			color: var(--text-secondary);
+		}
+		.recommendations strong { color: var(--text); }
+		.recommendations ul { margin: 0.5rem 0 0 1rem; padding: 0; }
+		.recommendations li { margin: 0.25rem 0; }
 	</style>
 </head>
 <body>
 	<div class="container">
-		<h1>Resource Allocation – Chat</h1>
-		<p class="status" id="status">Connecting…</p>
+		<header class="header">
+			<h1>Resource Allocation</h1>
+			<div class="status-bar">
+				<span class="status-dot connecting" id="statusDot"></span>
+				<span id="status">Connecting…</span>
+			</div>
+			<a href="/">← Home</a>
+		</header>
 
 		<div class="panel">
-			<h2>Realtime state</h2>
-			<p><strong>My assignments</strong></p>
-			<ul id="stateAssignments">—</ul>
-			<p><strong>Notifications</strong></p>
-			<ul id="stateNotifications">—</ul>
+			<h2>Live state</h2>
+			<div class="state-grid">
+				<div class="state-block">
+					<strong>My assignments</strong>
+					<ul id="stateAssignments">—</ul>
+				</div>
+				<div class="state-block">
+					<strong>Notifications</strong>
+					<ul id="stateNotifications">—</ul>
+				</div>
+			</div>
 		</div>
 
 		<div class="panel">
 			<h2>Chat</h2>
 			<div id="log"></div>
-			<div class="row" style="margin-top: 0.75rem;">
-				<label>User ID <input type="text" id="userId" value="user-1" placeholder="user-1" style="width: 100px;" /></label>
-				<input type="text" id="input" placeholder="Type a message or: request P1, return P1, list resources…" />
+			<div class="input-row">
+				<div class="user-id-wrap">
+					<label for="userId">User</label>
+					<input type="text" id="userId" value="user-1" placeholder="user-1" />
+				</div>
+				<input type="text" id="input" placeholder="Request P1, return P1, list resources, or ask anything…" />
 				<button type="button" id="send" class="primary">Send</button>
-				<button type="button" id="voice" class="secondary" title="Record voice (sends transcript to chat)">🎤 Voice</button>
+				<button type="button" id="voice" class="secondary" title="Record voice (transcript sent to chat)">🎤 Voice</button>
 			</div>
 			<div class="recommendations" id="recommendations"></div>
 		</div>
@@ -63,21 +298,21 @@
 		const pendingCalls = new Map();
 		let ws = null;
 
-		function setStatus(text) {
+		function setStatus(text, state = '') {
 			document.getElementById('status').textContent = text;
+			const dot = document.getElementById('statusDot');
+			dot.className = 'status-dot ' + (state || (text === 'Connected' ? 'connected' : text === 'Error' || text === 'Disconnected' ? 'error' : 'connecting'));
 		}
 
 		function connect() {
 			ws = new WebSocket(wsUrl);
-			ws.onopen = () => setStatus('Connected');
-			ws.onclose = () => setStatus('Disconnected');
-			ws.onerror = () => setStatus('Error');
+			ws.onopen = () => setStatus('Connected', 'connected');
+			ws.onclose = () => setStatus('Disconnected', 'error');
+			ws.onerror = () => setStatus('Error', 'error');
 			ws.onmessage = (event) => {
 				try {
 					const msg = JSON.parse(event.data);
-					if (msg.type === 'cf_agent_state' && msg.state) {
-						updateStateUI(msg.state);
-					}
+					if (msg.type === 'cf_agent_state' && msg.state) updateStateUI(msg.state);
 					if (msg.type === 'rpc' && msg.id && pendingCalls.has(msg.id)) {
 						const { resolve, reject } = pendingCalls.get(msg.id);
 						pendingCalls.delete(msg.id);
@@ -132,7 +367,7 @@
 				const list = await call('getRecommendations', [userId]);
 				const el = document.getElementById('recommendations');
 				if (Array.isArray(list) && list.length) {
-					el.innerHTML = '<strong>Suggestions:</strong><ul>' + list.map(s => '<li>' + escapeHtml(s) + '</li>').join('') + '</ul>';
+					el.innerHTML = '<strong>Suggestions</strong><ul>' + list.map(s => '<li>' + escapeHtml(s) + '</li>').join('') + '</ul>';
 				} else {
 					el.innerHTML = '';
 				}
@@ -159,11 +394,9 @@
 			document.getElementById('send').disabled = false;
 		}
 
-		// Voice: record -> POST /api/voice -> put transcript in input and send
 		let mediaRecorder = null;
 		let chunks = [];
-		const voiceBtn = document.getElementById('voice');
-		voiceBtn.addEventListener('click', async () => {
+		document.getElementById('voice').addEventListener('click', async () => {
 			if (mediaRecorder && mediaRecorder.state === 'recording') {
 				mediaRecorder.stop();
 				return;
@@ -175,7 +408,7 @@
 				mediaRecorder.ondataavailable = (e) => e.data.size && chunks.push(e.data);
 				mediaRecorder.onstop = async () => {
 					stream.getTracks().forEach(t => t.stop());
-					voiceBtn.textContent = '🎤 Voice';
+					document.getElementById('voice').textContent = '🎤 Voice';
 					const blob = new Blob(chunks, { type: 'audio/webm' });
 					const form = new FormData();
 					form.append('audio', blob);
@@ -194,7 +427,7 @@
 					}
 				};
 				mediaRecorder.start();
-				voiceBtn.textContent = '⏹ Stop';
+				document.getElementById('voice').textContent = '⏹ Stop';
 			} catch (e) {
 				appendMessage('assistant', 'Microphone access denied or error: ' + e.message);
 			}
